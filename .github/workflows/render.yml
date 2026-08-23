@@ -5,6 +5,7 @@ on:
       job_id: { required: true, type: string }
       title: { required: true, type: string }
       script: { required: true, type: string }
+      image_urls: { required: false, type: string, default: "[]" }
       callback_url: { required: true, type: string }
       callback_token: { required: true, type: string }
 permissions:
@@ -27,7 +28,8 @@ jobs:
           JOB_ID: ${{ inputs.job_id }}
           TITLE: ${{ inputs.title }}
           SCRIPT: ${{ inputs.script }}
-        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"]},ensure_ascii=False))'
+          IMAGE_URLS: ${{ inputs.image_urls }}
+        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ.get("IMAGE_URLS") or "[]")},ensure_ascii=False))'
       - name: Render
         run: python render.py job.json
       - name: Publish video

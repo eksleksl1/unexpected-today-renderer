@@ -1,0 +1,44 @@
+name: Render approved short
+on:
+  workflow_dispatch:
+    inputs:
+      job_id: { required: true, type: string }
+      title: { required: true, type: string }
+      script: { required: true, type: string }
+      callback_url: { required: true, type: string }
+      callback_token: { required: true, type: string }
+permissions:
+  contents: write
+concurrency:
+  group: video-renderer
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-nanum
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Prepare job
+        env:
+          JOB_ID: ${{ inputs.job_id }}
+          TITLE: ${{ inputs.title }}
+          SCRIPT: ${{ inputs.script }}
+        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"]},ensure_ascii=False))'
+      - name: Render
+        run: python render.py job.json
+      - name: Publish video
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="video-${{ inputs.job_id }}-${{ github.run_id }}"
+          gh release create "$TAG" output/result.mp4 --title "${{ inputs.title }}" --notes "자동 제작 영상"
+          echo "VIDEO_URL=https://github.com/${{ github.repository }}/releases/download/$TAG/result.mp4" >> "$GITHUB_ENV"
+      - name: Return result
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg videoUrl "$VIDEO_URL" '{token:$token,videoUrl:$videoUrl}')"

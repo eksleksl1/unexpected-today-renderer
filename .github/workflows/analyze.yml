@@ -53,4 +53,5 @@ jobs:
         env:
           CALLBACK_URL: ${{ inputs.callback_url }}
           CALLBACK_TOKEN: ${{ inputs.callback_token }}
-        run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg error "원본 이미지 사전 분석을 통과하지 못했습니다." '{token:$token,error:$error}')"
+        run: |
+          curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg error "원본 이미지 사전 분석을 통과하지 못했습니다." '{token:$token,error:$error}')"

@@ -1,0 +1,56 @@
+name: Analyze collected candidate
+on:
+  workflow_dispatch:
+    inputs:
+      job_id: { required: true, type: string }
+      title: { required: true, type: string }
+      script: { required: true, type: string }
+      image_urls: { required: true, type: string }
+      callback_url: { required: true, type: string }
+      callback_token: { required: true, type: string }
+permissions:
+  contents: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-nanum tesseract-ocr tesseract-ocr-kor
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Prepare job
+        env:
+          JOB_ID: ${{ inputs.job_id }}
+          TITLE: ${{ inputs.title }}
+          SCRIPT: ${{ inputs.script }}
+          IMAGE_URLS: ${{ inputs.image_urls }}
+        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ["IMAGE_URLS"])},ensure_ascii=False))'
+      - name: Analyze media
+        id: analysis
+        continue-on-error: true
+        run: python analyze.py job.json
+      - name: Publish analyzed assets
+        if: steps.analysis.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="analysis-${{ inputs.job_id }}-${{ github.run_id }}"
+          gh release create "$TAG" analysis-output/* --title "분석 ${{ inputs.job_id }}" --notes "자동 사전 분석"
+          echo "ASSET_BASE=https://github.com/${{ github.repository }}/releases/download/$TAG" >> "$GITHUB_ENV"
+      - name: Return analyzed candidate
+        if: steps.analysis.outcome == 'success'
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: |
+          IMAGES=$(find analysis-output -name 'frame-*.jpg' -printf '%f\n' | sort | sed "s#^#$ASSET_BASE/#" | jq -R . | jq -s .)
+          MANIFEST=$(cat analysis-output/manifest.json)
+          curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --argjson imageUrls "$IMAGES" --arg previewAudioUrl "$ASSET_BASE/preview.mp3" --argjson analysis "$MANIFEST" '{token:$token,imageUrls:$imageUrls,previewAudioUrl:$previewAudioUrl,analysis:$analysis}')"
+      - name: Reject unusable candidate
+        if: steps.analysis.outcome != 'success'
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg error "원본 이미지 사전 분석을 통과하지 못했습니다." '{token:$token,error:$error}')"

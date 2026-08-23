@@ -1,5 +1,5 @@
 name: Analyze and render approved short
-on:
+"on":
   workflow_dispatch:
     inputs:
       mode: { required: false, type: string, default: "render" }

@@ -31,8 +31,11 @@ jobs:
           IMAGE_URLS: ${{ inputs.image_urls }}
         run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ.get("IMAGE_URLS") or "[]")},ensure_ascii=False))'
       - name: Render
+        id: render
+        continue-on-error: true
         run: python render.py job.json
       - name: Publish video
+        if: steps.render.outcome == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -40,7 +43,14 @@ jobs:
           gh release create "$TAG" output/result.mp4 --title "${{ inputs.title }}" --notes "자동 제작 영상"
           echo "VIDEO_URL=https://github.com/${{ github.repository }}/releases/download/$TAG/result.mp4" >> "$GITHUB_ENV"
       - name: Return result
+        if: steps.render.outcome == 'success'
         env:
           CALLBACK_URL: ${{ inputs.callback_url }}
           CALLBACK_TOKEN: ${{ inputs.callback_token }}
         run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg videoUrl "$VIDEO_URL" '{token:$token,videoUrl:$videoUrl}')"
+      - name: Return rejection
+        if: steps.render.outcome != 'success'
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg error "사용 가능한 자막 없는 원본 이미지를 찾지 못해 자동 제외했습니다." '{token:$token,error:$error}')"

@@ -1,4 +1,4 @@
-import asyncio, json, re, subprocess, sys, textwrap
+import asyncio, io, json, re, subprocess, sys, textwrap, urllib.request
 from pathlib import Path
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont
@@ -10,8 +10,14 @@ def font(size,bold=False): return ImageFont.truetype("/usr/share/fonts/truetype/
 def split(text):
     parts=[p.strip() for p in re.split(r"\n\s*\n",text) if p.strip()]
     return parts if len(parts)>1 else [x.strip() for x in re.split(r"(?<=[.!?])\s+",text) if x.strip()]
-def slide(text,path):
-    im=Image.new("RGB",(W,H),(12,12,13));d=ImageDraw.Draw(im);f=font(48,True);lines=textwrap.wrap(text,width=20,break_long_words=True,break_on_hyphens=False);y=max(180,(H-len(lines)*78)//2-80)
+def slide(text,path,image_url=None):
+    im=Image.new("RGB",(W,H),(12,12,13))
+    if image_url:
+        try:
+            req=urllib.request.Request(image_url,headers={"User-Agent":"Mozilla/5.0 UnexpectedToday/1.0"});raw=urllib.request.urlopen(req,timeout=20).read();photo=Image.open(io.BytesIO(raw)).convert("RGB")
+            scale=max(W/photo.width,H/photo.height);photo=photo.resize((int(photo.width*scale),int(photo.height*scale)));left=(photo.width-W)//2;top=(photo.height-H)//2;im=photo.crop((left,top,left+W,top+H));shade=Image.new("RGBA",(W,H),(0,0,0,105));im=Image.alpha_composite(im.convert("RGBA"),shade).convert("RGB")
+        except Exception: pass
+    d=ImageDraw.Draw(im);f=font(48,True);lines=textwrap.wrap(text,width=20,break_long_words=True,break_on_hyphens=False);y=max(180,(H-len(lines)*78)//2-80)
     for line in lines:
         box=d.textbbox((0,0),line,font=f);d.text(((W-(box[2]-box[0]))//2,y),line,font=f,fill=(242,242,242));y+=78
     d.text((70,H-110),"뜻밖의 오늘",font=font(28,True),fill=(197,226,113));im.save(path)
@@ -37,10 +43,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     Path(out).write_text(header+"\n".join(f"Dialogue: 0,{t(a)},{t(b)},Default,,0,0,0,,{re.sub(r'<[^>]+>','',txt)}" for a,b,txt in cues),encoding="utf-8-sig")
 def main(job_path):
-    job=json.loads(Path(job_path).read_text(encoding="utf-8"));WORK.mkdir(exist_ok=True);OUT.mkdir(exist_ok=True);parts=[]
+    job=json.loads(Path(job_path).read_text(encoding="utf-8"));WORK.mkdir(exist_ok=True);OUT.mkdir(exist_ok=True);parts=[];images=job.get("image_urls") or []
     for i,text in enumerate(split(job["script"])):
         base=WORK/f"part-{i:03d}";png=base.with_suffix(".png");mp3=base.with_suffix(".mp3");vtt=base.with_suffix(".vtt");sub=base.with_suffix(".ass");mp4=base.with_suffix(".mp4")
-        slide(text,png);asyncio.run(voice(text,mp3,vtt));ass(vtt,sub);length=duration(mp3)+.25
+        slide(text,png,images[i%len(images)] if images else None);asyncio.run(voice(text,mp3,vtt));ass(vtt,sub);length=duration(mp3)+.25
         run(["ffmpeg","-y","-loop","1","-framerate",str(FPS),"-i",png,"-i",mp3,"-vf",f"subtitles={sub},fade=t=in:st=0:d=.12,fade=t=out:st={max(0,length-.12):.3f}:d=.12","-t",f"{length:.3f}","-r",str(FPS),"-c:v","libx264","-preset","veryfast","-crf","21","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k","-shortest",mp4]);parts.append(mp4)
     listing=WORK/"concat.txt";listing.write_text("\n".join(f"file '{p.as_posix()}'" for p in parts),encoding="utf-8");run(["ffmpeg","-y","-f","concat","-safe","0","-i",listing,"-c","copy",OUT/"result.mp4"])
 if __name__=="__main__":main(sys.argv[1] if len(sys.argv)>1 else ROOT/"job.json")

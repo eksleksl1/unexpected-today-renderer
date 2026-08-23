@@ -15,7 +15,7 @@ def slide(title,path,image_url=None):
     if image_url:
         try:
             req=urllib.request.Request(image_url,headers={"User-Agent":"Mozilla/5.0 UnexpectedToday/1.0"});raw=urllib.request.urlopen(req,timeout=20).read();photo=Image.open(io.BytesIO(raw)).convert("RGB")
-            scale=max(W/photo.width,visual_h/photo.height);photo=photo.resize((int(photo.width*scale),int(photo.height*scale)));left=(photo.width-W)//2;top=(photo.height-visual_h)//2;im.paste(photo.crop((left,top,left+W,top+visual_h)),(0,visual_y))
+            scale=min(W/photo.width,visual_h/photo.height);photo=photo.resize((max(1,int(photo.width*scale)),max(1,int(photo.height*scale))));left=(W-photo.width)//2;top=visual_y+(visual_h-photo.height)//2;im.paste(photo,(left,top))
         except Exception: pass
     d=ImageDraw.Draw(im);d.text((75,92),"뜻밖의 오늘",font=font(32,True),fill=(20,232,61));f=font(62,True);lines=textwrap.wrap(title,width=15,break_long_words=True,break_on_hyphens=False)[:4];y=155
     for idx,line in enumerate(lines):

@@ -1,1 +1,5 @@
-# unexpected-today-renderer
+# 뜻밖의 오늘 무료 렌더러
+
+공개 GitHub 저장소의 무료 Actions에서만 실행됩니다. 결제수단은 필요하지 않습니다.
+
+Windows에서 압축을 푼 뒤 setup.cmd를 더블클릭하면 저장소 설치가 자동으로 끝납니다.

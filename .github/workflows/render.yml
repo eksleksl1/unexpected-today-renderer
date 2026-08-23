@@ -1,7 +1,8 @@
-name: Render approved short
+name: Analyze and render approved short
 on:
   workflow_dispatch:
     inputs:
+      mode: { required: false, type: string, default: "render" }
       job_id: { required: true, type: string }
       title: { required: true, type: string }
       script: { required: true, type: string }
@@ -11,10 +12,10 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: video-renderer
+  group: media-${{ inputs.mode }}-${{ inputs.job_id }}
   cancel-in-progress: false
 jobs:
-  render:
+  process:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -30,26 +31,53 @@ jobs:
           SCRIPT: ${{ inputs.script }}
           IMAGE_URLS: ${{ inputs.image_urls }}
         run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ.get("IMAGE_URLS") or "[]")},ensure_ascii=False))'
-      - name: Render
+      - name: Analyze candidate media
+        if: inputs.mode == 'analyze'
+        id: analysis
+        continue-on-error: true
+        run: python analyze.py job.json
+      - name: Publish analyzed assets
+        if: inputs.mode == 'analyze' && steps.analysis.outcome == 'success'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          TAG="analysis-${{ inputs.job_id }}-${{ github.run_id }}"
+          gh release create "$TAG" analysis-output/* --title "분석 ${{ inputs.job_id }}" --notes "자동 사전 분석"
+          echo "ASSET_BASE=https://github.com/${{ github.repository }}/releases/download/$TAG" >> "$GITHUB_ENV"
+      - name: Return analyzed candidate
+        if: inputs.mode == 'analyze' && steps.analysis.outcome == 'success'
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: |
+          IMAGES=$(find analysis-output -name 'frame-*.jpg' -printf '%f\n' | sort | sed "s#^#$ASSET_BASE/#" | jq -R . | jq -s .)
+          MANIFEST=$(cat analysis-output/manifest.json)
+          curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --argjson imageUrls "$IMAGES" --arg previewAudioUrl "$ASSET_BASE/preview.mp3" --argjson analysis "$MANIFEST" '{token:$token,imageUrls:$imageUrls,previewAudioUrl:$previewAudioUrl,analysis:$analysis}')"
+      - name: Reject unusable candidate
+        if: inputs.mode == 'analyze' && steps.analysis.outcome != 'success'
+        env:
+          CALLBACK_URL: ${{ inputs.callback_url }}
+          CALLBACK_TOKEN: ${{ inputs.callback_token }}
+        run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg error "원본 이미지 사전 분석을 통과하지 못했습니다." '{token:$token,error:$error}')"
+      - name: Render approved video
+        if: inputs.mode != 'analyze'
         id: render
         continue-on-error: true
         run: python render.py job.json
       - name: Publish video
-        if: steps.render.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        if: inputs.mode != 'analyze' && steps.render.outcome == 'success'
+        env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           TAG="video-${{ inputs.job_id }}-${{ github.run_id }}"
           gh release create "$TAG" output/result.mp4 --title "${{ inputs.title }}" --notes "자동 제작 영상"
           echo "VIDEO_URL=https://github.com/${{ github.repository }}/releases/download/$TAG/result.mp4" >> "$GITHUB_ENV"
-      - name: Return result
-        if: steps.render.outcome == 'success'
+      - name: Return video
+        if: inputs.mode != 'analyze' && steps.render.outcome == 'success'
         env:
           CALLBACK_URL: ${{ inputs.callback_url }}
           CALLBACK_TOKEN: ${{ inputs.callback_token }}
         run: curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg videoUrl "$VIDEO_URL" '{token:$token,videoUrl:$videoUrl}')"
-      - name: Return rejection
-        if: steps.render.outcome != 'success'
+      - name: Return render failure
+        if: inputs.mode != 'analyze' && steps.render.outcome != 'success'
         env:
           CALLBACK_URL: ${{ inputs.callback_url }}
           CALLBACK_TOKEN: ${{ inputs.callback_token }}

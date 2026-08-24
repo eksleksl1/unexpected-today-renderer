@@ -8,6 +8,7 @@ name: Analyze and render approved short
       script: { required: true, type: string }
       image_urls: { required: false, type: string, default: "[]" }
       captions_json: { required: false, type: string, default: "[]" }
+      scene_frames_json: { required: false, type: string, default: "[]" }
       callback_url: { required: true, type: string }
       callback_token: { required: true, type: string }
 permissions:
@@ -32,7 +33,8 @@ jobs:
           SCRIPT: ${{ inputs.script }}
           IMAGE_URLS: ${{ inputs.image_urls }}
           CAPTIONS_JSON: ${{ inputs.captions_json }}
-        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ.get("IMAGE_URLS") or "[]"),"captions":json.loads(os.environ.get("CAPTIONS_JSON") or "[]")},ensure_ascii=False))'
+          SCENE_FRAMES_JSON: ${{ inputs.scene_frames_json }}
+        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ.get("IMAGE_URLS") or "[]"),"captions":json.loads(os.environ.get("CAPTIONS_JSON") or "[]"),"scene_frames":json.loads(os.environ.get("SCENE_FRAMES_JSON") or "[]")},ensure_ascii=False))'
       - name: Analyze candidate media
         if: inputs.mode == 'analyze'
         id: analysis

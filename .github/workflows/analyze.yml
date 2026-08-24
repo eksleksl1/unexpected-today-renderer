@@ -30,12 +30,13 @@ jobs:
       - name: Analyze media
         id: analysis
         continue-on-error: true
-        run: python analyze.py job.json
+        run: python analyze.py job.json 2>analysis-error.txt
       - name: Prepare rejected result
         if: steps.analysis.outcome != 'success'
         run: |
           mkdir -p analysis-output
-          printf '%s' '{"error":"원본 이미지 사전 분석을 통과하지 못했습니다.","frames":0}' > analysis-output/manifest.json
+          ERROR=$(tail -c 1200 analysis-error.txt | jq -Rs .)
+          printf '{"error":%s,"frames":0}' "$ERROR" > analysis-output/manifest.json
       - name: Publish analysis result
         if: always()
         env:

@@ -76,13 +76,13 @@ async def voice(text,audio,vtt):
         async for chunk in talk.stream():
             if chunk["type"]=="audio":media.write(chunk["data"])
             elif chunk["type"]=="WordBoundary":subs.feed(chunk)
-    Path(vtt).write_text(subs.get_webvtt(),encoding="utf-8")
+    Path(vtt).write_text(subs.get_srt(),encoding="utf-8")
 def secs(x):
-    h,m,s=x.split(":");return int(h)*3600+int(m)*60+float(s)
+    h,m,s=x.replace(",",".").split(":");return int(h)*3600+int(m)*60+float(s)
 def stamp(value):
     h=int(value//3600);value-=h*3600;m=int(value//60);s=value-m*60;return f"{h}:{m:02d}:{s:05.2f}"
 def ass(vtt,out):
-    raw=Path(vtt).read_text(encoding="utf-8-sig");cues=re.findall(r"(\d\d:\d\d:\d\d\.\d{3}) --> (\d\d:\d\d:\d\d\.\d{3})[^\n]*\n([^\n]+)",raw);events=[]
+    raw=Path(vtt).read_text(encoding="utf-8-sig");cues=re.findall(r"(?:\d+\s*\n)?(\d\d:\d\d:\d\d[.,]\d{3}) --> (\d\d:\d\d:\d\d[.,]\d{3})[^\n]*\n([^\n]+)",raw);events=[]
     for a,b,txt in cues:
         txt=re.sub(r"<[^>]+>","",txt).strip();chunks=[x.strip() for x in re.findall(r".{1,22}(?:\s|$)|.{1,22}",txt) if x.strip()];start,end=secs(a),secs(b);span=max(.12,(end-start)/max(1,len(chunks)))
         for i,chunk in enumerate(chunks):

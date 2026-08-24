@@ -39,9 +39,14 @@ jobs:
           printf '{"error":%s,"frames":0}' "$ERROR" > analysis-output/manifest.json
       - name: Publish analysis result
         if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="analysis-${{ inputs.job_id }}"
-          gh release delete "$TAG" --yes --cleanup-tag || true
-          gh release create "$TAG" analysis-output/* --title "분석 ${{ inputs.job_id }}" --notes "자동 사전 분석"
+          BRANCH="analysis-${{ inputs.job_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan "$BRANCH"
+          git rm -rf . || true
+          mkdir -p result
+          cp -R analysis-output/. result/
+          git add -f result
+          git commit -m "Publish analysis ${{ inputs.job_id }}"
+          git push --force origin "HEAD:refs/heads/$BRANCH"

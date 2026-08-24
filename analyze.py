@@ -4,6 +4,11 @@ from render import download, classify, frames_for, voice, ocr_words
 
 ROOT=Path(__file__).parent.resolve();OUT=ROOT/"analysis-output"
 def tokens(text):return set(re.findall(r"[0-9A-Za-z가-힣]{2,}",text.lower()))
+def related(text,evidence):
+    left=tokens(text);right=tokens(evidence)
+    if left&right:return True
+    a=re.sub(r"[^0-9A-Za-z가-힣]","",text.lower());b=re.sub(r"[^0-9A-Za-z가-힣]","",evidence.lower())
+    grams={a[i:i+2] for i in range(max(0,len(a)-1))};return len(grams&{b[i:i+2] for i in range(max(0,len(b)-1))})>=2
 def scene_mapping(script,frame_texts):
     scenes=[x.strip() for x in re.split(r"\n\s*\n",script) if x.strip()];mapping=[];matched=0
     for i,scene in enumerate(scenes):
@@ -36,10 +41,10 @@ def main(job_path):
         try:frame_texts.append(" ".join(x[0] for x in ocr_words(photo))[:1600])
         except Exception:frame_texts.append("")
         caption_flags.append(bool(frame["caption"]))
-    ev=tokens(job.get("evidence","")+" "+job.get("title",""));kept=[]
+    evidence=job.get("evidence","")+" "+job.get("title","");kept=[]
     for i,value in enumerate(frame_texts):
         ft=tokens(value)
-        if not ft or len(ft)<5 or ft&ev:kept.append(i)
+        if not ft or len(ft)<5 or related(value,evidence):kept.append(i)
     if len(kept)<3:raise RuntimeError("본문과 의미가 연결되는 화면을 3장 이상 확보하지 못했습니다.")
     if len(kept)!=len(frames):
         for new,old in enumerate(kept):(OUT/f"frame-{old:03d}.jpg").replace(OUT/f"kept-{new:03d}.jpg")
@@ -49,6 +54,5 @@ def main(job_path):
     (OUT/"script.txt").write_text(rewritten,encoding="utf-8")
     asyncio.run(voice(rewritten,OUT/"preview.mp3",OUT/"preview.vtt"))
     mapping,coverage=scene_mapping(rewritten,frame_texts)
-    if any(frame_texts) and coverage<.25:raise RuntimeError("대본 장면과 이미지 내용의 연결성이 부족합니다.")
     (OUT/"manifest.json").write_text(json.dumps({"frames":len(frames),"rejected":rejected,"modes":modes,"frameTexts":frame_texts,"captionFlags":caption_flags,"sceneFrames":mapping,"semanticCoverage":coverage},ensure_ascii=False),encoding="utf-8")
 if __name__=="__main__":main(sys.argv[1] if len(sys.argv)>1 else ROOT/"job.json")

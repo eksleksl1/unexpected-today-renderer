@@ -31,27 +31,16 @@ jobs:
         id: analysis
         continue-on-error: true
         run: python analyze.py job.json
-      - name: Publish analyzed assets
-        if: steps.analysis.outcome == 'success'
+      - name: Prepare rejected result
+        if: steps.analysis.outcome != 'success'
+        run: |
+          mkdir -p analysis-output
+          printf '%s' '{"error":"원본 이미지 사전 분석을 통과하지 못했습니다.","frames":0}' > analysis-output/manifest.json
+      - name: Publish analysis result
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="analysis-${{ inputs.job_id }}-${{ github.run_id }}"
+          TAG="analysis-${{ inputs.job_id }}"
+          gh release delete "$TAG" --yes --cleanup-tag || true
           gh release create "$TAG" analysis-output/* --title "분석 ${{ inputs.job_id }}" --notes "자동 사전 분석"
-          echo "ASSET_BASE=https://github.com/${{ github.repository }}/releases/download/$TAG" >> "$GITHUB_ENV"
-      - name: Return analyzed candidate
-        if: steps.analysis.outcome == 'success'
-        env:
-          CALLBACK_URL: ${{ inputs.callback_url }}
-          CALLBACK_TOKEN: ${{ inputs.callback_token }}
-        run: |
-          IMAGES=$(find analysis-output -name 'frame-*.jpg' -printf '%f\n' | sort | sed "s#^#$ASSET_BASE/#" | jq -R . | jq -s .)
-          MANIFEST=$(cat analysis-output/manifest.json)
-          curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --argjson imageUrls "$IMAGES" --arg previewAudioUrl "$ASSET_BASE/preview.mp3" --argjson analysis "$MANIFEST" '{token:$token,imageUrls:$imageUrls,previewAudioUrl:$previewAudioUrl,analysis:$analysis}')"
-      - name: Reject unusable candidate
-        if: steps.analysis.outcome != 'success'
-        env:
-          CALLBACK_URL: ${{ inputs.callback_url }}
-          CALLBACK_TOKEN: ${{ inputs.callback_token }}
-        run: |
-          curl --fail-with-body -X POST "$CALLBACK_URL" -H 'content-type: application/json' --data "$(jq -n --arg token "$CALLBACK_TOKEN" --arg error "원본 이미지 사전 분석을 통과하지 못했습니다." '{token:$token,error:$error}')"

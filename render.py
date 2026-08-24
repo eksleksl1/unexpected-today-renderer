@@ -98,10 +98,23 @@ Style: Default,NanumGothic,68,&H00FFFFFF,&H0000FFFF,&H00101010,&H90000000,-1,0,0
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     Path(out).write_text(header+"\n".join(events),encoding="utf-8-sig")
+def caption_ass(text,length,out):
+    lines=textwrap.wrap(re.sub(r"\s+"," ",text).strip(),width=11,break_long_words=True,break_on_hyphens=False)[:2];caption="\\N".join(lines)
+    header="""[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,NanumGothic,68,&H00FFFFFF,&H0000FFFF,&H00101010,&H90000000,-1,0,0,0,100,100,0,0,1,6,1,2,105,105,565,1
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+    Path(out).write_text(header+f"Dialogue: 0,0:00:00.08,{stamp(max(.15,length-.08))},Default,,0,0,0,,{caption}",encoding="utf-8-sig")
 def main(job_path):
-    job=json.loads(Path(job_path).read_text(encoding="utf-8"));WORK.mkdir(exist_ok=True);OUT.mkdir(exist_ok=True);frames=prepare(job.get("image_urls") or []);texts=split_count(job["script"],max(len(frames),len(re.split(r"\n\s*\n",job["script"]))));parts=[]
+    job=json.loads(Path(job_path).read_text(encoding="utf-8"));WORK.mkdir(exist_ok=True);OUT.mkdir(exist_ok=True);frames=prepare(job.get("image_urls") or []);paragraphs=[x.strip() for x in re.split(r"\n\s*\n",job["script"]) if x.strip()];texts=paragraphs or split_count(job["script"],max(len(frames),6));captions=job.get("captions") or [];parts=[]
     for i,text in enumerate(texts):
-        frame=frames[min(len(frames)-1,int(i*len(frames)/len(texts)))];base=WORK/f"part-{i:03d}";png=base.with_suffix(".png");mp3=base.with_suffix(".mp3");vtt=base.with_suffix(".vtt");sub=base.with_suffix(".ass");mp4=base.with_suffix(".mp4");slide(job["title"],png,frame);asyncio.run(voice(text,mp3,vtt));ass(vtt,sub);length=duration(mp3)+.25;captions=f"subtitles={sub}," if frame["caption"] else ""
-        run(["ffmpeg","-y","-loop","1","-framerate",str(FPS),"-i",png,"-i",mp3,"-vf",f"{captions}fade=t=in:st=0:d=.12,fade=t=out:st={max(0,length-.12):.3f}:d=.12","-t",f"{length:.3f}","-r",str(FPS),"-c:v","libx264","-preset","veryfast","-crf","21","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k","-shortest",mp4]);parts.append(mp4)
+        frame=frames[min(len(frames)-1,int(i*len(frames)/len(texts)))];base=WORK/f"part-{i:03d}";png=base.with_suffix(".png");mp3=base.with_suffix(".mp3");vtt=base.with_suffix(".vtt");sub=base.with_suffix(".ass");mp4=base.with_suffix(".mp4");slide(job["title"],png,frame);asyncio.run(voice(text,mp3,vtt));length=duration(mp3)+.25;caption_ass(captions[i] if i<len(captions) else text,length,sub);subtitle_filter=f"subtitles={sub}," if frame["caption"] else ""
+        run(["ffmpeg","-y","-loop","1","-framerate",str(FPS),"-i",png,"-i",mp3,"-vf",f"{subtitle_filter}fade=t=in:st=0:d=.12,fade=t=out:st={max(0,length-.12):.3f}:d=.12","-t",f"{length:.3f}","-r",str(FPS),"-c:v","libx264","-preset","veryfast","-crf","21","-pix_fmt","yuv420p","-c:a","aac","-b:a","160k","-shortest",mp4]);parts.append(mp4)
     listing=WORK/"concat.txt";listing.write_text("\n".join(f"file '{p.as_posix()}'" for p in parts),encoding="utf-8");run(["ffmpeg","-y","-f","concat","-safe","0","-i",listing,"-c","copy",OUT/"result.mp4"])
 if __name__=="__main__":main(sys.argv[1] if len(sys.argv)>1 else ROOT/"job.json")

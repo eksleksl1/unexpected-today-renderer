@@ -29,13 +29,18 @@ def rewrite_script(title,source):
 본문:
 {source[:2400]}
 """
-    messages=[{"role":"system","content":"사실을 과장하거나 창작하지 않고, 원문을 새 내레이션으로 재구성하는 한국어 쇼츠 작가다."},{"role":"user","content":prompt}]
-    inputs=tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
-    encoded=tokenizer([inputs],return_tensors="pt")
-    generated=model.generate(**encoded,max_new_tokens=760,do_sample=True,temperature=.55,top_p=.86,repetition_penalty=1.12)
-    output=tokenizer.batch_decode(generated[:,encoded.input_ids.shape[1]:],skip_special_tokens=True)[0]
-    output=clean_output(output)
-    compact=re.sub(r"\s+","",output);original=re.sub(r"\s+","",source)
-    if len(output)<180 or len(output)>850 or SequenceMatcher(None,compact,original).ratio()>.82:
-        raise RuntimeError("원문 재작성 품질 기준을 통과하지 못했습니다.")
-    return output
+    system="사실을 과장하거나 창작하지 않고, 원문을 새 내레이션으로 재구성하는 한국어 쇼츠 작가다."
+    original=re.sub(r"\s+","",source);best="";best_score=-999.0
+    for attempt in range(2):
+        extra="" if attempt==0 else "\n이전 결과가 짧거나 원문과 비슷했다. 핵심 사실은 유지하되 8~12개의 새로운 구어체 문장으로 더 충실하게 다시 써라. 문장을 그대로 옮기지 마라."
+        messages=[{"role":"system","content":system},{"role":"user","content":prompt+extra}]
+        inputs=tokenizer.apply_chat_template(messages,tokenize=False,add_generation_prompt=True)
+        encoded=tokenizer([inputs],return_tensors="pt")
+        generated=model.generate(**encoded,max_new_tokens=680,do_sample=True,temperature=.62,top_p=.88,repetition_penalty=1.14)
+        output=clean_output(tokenizer.batch_decode(generated[:,encoded.input_ids.shape[1]:],skip_special_tokens=True)[0])
+        ratio=SequenceMatcher(None,re.sub(r"\s+","",output),original).ratio()
+        score=min(len(output),500)-max(0,len(output)-650)*2-ratio*240
+        if score>best_score:best,best_score=output,score
+        if 180<=len(output)<=850 and ratio<=.82:return output
+    ratio=SequenceMatcher(None,re.sub(r"\s+","",best),original).ratio()
+    raise RuntimeError(f"원문 재작성 품질 기준 미달: length={len(best)}, similarity={ratio:.3f}, draft={best[:600]}")

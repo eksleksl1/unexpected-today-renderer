@@ -1,7 +1,6 @@
 import asyncio, json, sys
 from pathlib import Path
 from render import download, classify, frames_for, voice
-from rewrite import rewrite_script
 
 ROOT=Path(__file__).parent.resolve();OUT=ROOT/"analysis-output"
 def main(job_path):
@@ -13,7 +12,8 @@ def main(job_path):
             frames.extend(frames_for(photo,kind))
         except Exception:rejected+=1
     if not frames:raise RuntimeError("자막 없는 원본 이미지를 찾지 못했습니다.")
-    rewritten=rewrite_script(job["title"],job["script"])
+    rewritten=job["script"].strip()
+    if len(rewritten)<220:raise RuntimeError("재작성 대본 분량이 부족합니다.")
     for i,frame in enumerate(frames):
         photo=frame["photo"].crop(frame["box"]) if frame["box"] else frame["photo"].copy();photo.save(OUT/f"frame-{i:03d}.jpg",quality=91,optimize=True)
     (OUT/"script.txt").write_text(rewritten,encoding="utf-8")

@@ -5,6 +5,7 @@ MODEL="Qwen/Qwen3-1.7B"
 
 def clean_output(text):
     text=re.sub(r"^(?:대본|내레이션|쇼츠 대본)\s*[:：-]?\s*","",text.strip(),flags=re.I)
+    text=re.sub(r"^제목\s*[:：].*?(?:\n+|$)","",text).strip()
     text=re.sub(r"(?:원문|출처|제공된 글)(?:을|에)?\s*(?:따르면|기반으로).*?(?:\n|$)","",text)
     text=text.replace("###","").replace("**","").strip()
     return re.sub(r"\n{3,}","\n\n",text)
@@ -38,10 +39,14 @@ def rewrite_script(title,source):
     output=clean_output(tokenizer.batch_decode(generated[:,encoded.input_ids.shape[1]:],skip_special_tokens=True)[0])
     original=re.sub(r"\s+","",source);ratio=SequenceMatcher(None,re.sub(r"\s+","",output),original).ratio()
     stop={"그리고","하지만","그래서","이번","대한","하는","했다","있다","없다","정도","모습","내용","사람","사진"}
-    source_tokens=set(re.findall(r"[가-힣A-Za-z0-9]{2,}",source))-stop
+    def normalize_token(token):
+        if re.fullmatch(r"[가-힣]{3,}",token):
+            token=re.sub(r"(?:에서는|으로|에서|에게|께서|이랑|까지|부터|처럼|보다|하고|의|은|는|이|가|을|를|에|도|와|과|로|랑)$","",token)
+        return token
+    source_tokens={normalize_token(x) for x in re.findall(r"[가-힣A-Za-z0-9]{2,}",source)}-stop
     unsupported=[]
     for sentence in re.split(r"(?<=[.!?。])\s+|\n+",output):
-        tokens=(set(re.findall(r"[가-힣A-Za-z0-9]{2,}",sentence))-stop)
+        tokens=({normalize_token(x) for x in re.findall(r"[가-힣A-Za-z0-9]{2,}",sentence)}-stop)
         if len(tokens)>=3 and len(tokens&source_tokens)/len(tokens)<.16:unsupported.append(sentence)
     if not 180<=len(output)<=850 or ratio>.82 or unsupported:
         raise RuntimeError(f"근거 기반 재작성 기준 미달: length={len(output)}, similarity={ratio:.3f}, unsupported={unsupported[:2]}, draft={output[:600]}")

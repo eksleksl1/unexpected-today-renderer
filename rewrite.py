@@ -1,7 +1,7 @@
 import re
 from difflib import SequenceMatcher
 
-MODEL="Qwen/Qwen2.5-0.5B-Instruct"
+MODEL="Qwen/Qwen2.5-1.5B-Instruct"
 
 def clean_output(text):
     text=re.sub(r"^(?:대본|내레이션|쇼츠 대본)\s*[:：-]?\s*","",text.strip(),flags=re.I)
@@ -16,7 +16,7 @@ def rewrite_script(title,source):
     prompt=f"""너는 한국 유튜브 쇼츠 전문 작가다. 아래 커뮤니티 글을 그대로 복사하지 말고 사실관계만 사용해 완전히 새로운 한국어 내레이션 대본을 작성하라.
 
 규칙:
-- 35~55초 분량, 350~550자
+- 40~55초 분량, 300~500자, 8~12문장
 - 첫 1~2문장은 궁금증을 만드는 훅
 - 상황, 핵심 전개, 반응 또는 결론 순서
 - 같은 뜻을 새 문장 구조와 자연스러운 구어체로 재구성
@@ -36,6 +36,6 @@ def rewrite_script(title,source):
     output=tokenizer.batch_decode(generated[:,encoded.input_ids.shape[1]:],skip_special_tokens=True)[0]
     output=clean_output(output)
     compact=re.sub(r"\s+","",output);original=re.sub(r"\s+","",source)
-    if len(output)<220 or len(output)>850 or SequenceMatcher(None,compact,original).ratio()>.78:
+    if len(output)<180 or len(output)>850 or SequenceMatcher(None,compact,original).ratio()>.82:
         raise RuntimeError("원문 재작성 품질 기준을 통과하지 못했습니다.")
     return output

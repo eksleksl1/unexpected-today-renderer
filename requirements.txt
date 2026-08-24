@@ -1,5 +1,2 @@
 edge-tts==7.2.3
 Pillow==11.3.0
-transformers==4.56.2
-torch==2.8.0
-accelerate==1.10.1

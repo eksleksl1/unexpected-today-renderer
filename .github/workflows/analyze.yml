@@ -7,6 +7,7 @@ name: Analyze collected candidate
       script: { required: true, type: string }
       image_urls: { required: true, type: string }
       evidence: { required: false, type: string, default: "" }
+      content_mode: { required: false, type: string, default: "news" }
       callback_url: { required: true, type: string }
       callback_token: { required: true, type: string }
 permissions:
@@ -28,7 +29,8 @@ jobs:
           SCRIPT: ${{ inputs.script }}
           IMAGE_URLS: ${{ inputs.image_urls }}
           EVIDENCE: ${{ inputs.evidence }}
-        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ["IMAGE_URLS"]),"evidence":os.environ.get("EVIDENCE","")},ensure_ascii=False))'
+          CONTENT_MODE: ${{ inputs.content_mode }}
+        run: python -c 'import json,os;open("job.json","w").write(json.dumps({"job_id":os.environ["JOB_ID"],"title":os.environ["TITLE"],"script":os.environ["SCRIPT"],"image_urls":json.loads(os.environ["IMAGE_URLS"]),"evidence":os.environ.get("EVIDENCE",""),"content_mode":os.environ.get("CONTENT_MODE","news")},ensure_ascii=False))'
       - name: Analyze media
         id: analysis
         continue-on-error: true
